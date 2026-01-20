@@ -3,20 +3,15 @@
   "name": "Link Whisper Auto",
   "version": "1.0",
   "permissions": ["storage", "tabs"],
-  "host_permissions": [
-    "http://*/wp-admin/*",
-    "https://*/wp-admin/*"
+  "host_permissions": ["*://*/wp-admin/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://*/wp-admin/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "action": {
     "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "http://*/wp-admin/*",
-        "https://*/wp-admin/*"
-      ],
-      "js": ["content.js"]
-    }
-  ]
+  }
 }

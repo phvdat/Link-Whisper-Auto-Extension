@@ -1,4 +1,4 @@
-console.log('[LW] content.js loaded');
+console.log('[LW] content script injected');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -11,27 +11,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === 'START_LINK_WHISPER') {
-    chrome.storage.local.set(
-      {
-        lwRunning: true,
-        lwIndex: 0,
-        lwLimit: msg.limit || 20,
-        lwListUrl: msg.listUrl,
-      },
-      () => {
-        console.log('[LW] ▶️ Start automation');
-        run();
-      },
-    );
+    startAutomation(msg);
     sendResponse({ ok: true });
   }
 });
 
+/* ================= START ================= */
+
+async function startAutomation(msg) {
+  // ✅ Đánh dấu tab này đã nhấn Start
+  sessionStorage.setItem('lwManualStart', '1');
+
+  await chrome.storage.local.set({
+    lwRunning: true,
+    lwIndex: 0,
+    lwLimit: msg.limit || 20,
+    lwListUrl: msg.listUrl,
+  });
+
+  console.log('[LW] ▶️ Automation started');
+  run();
+}
+
 /* ================= ENTRY ================= */
 
-run();
-
 async function run() {
+  // ❌ Chưa nhấn Start trong tab này → KHÔNG chạy
+  if (!sessionStorage.getItem('lwManualStart')) return;
+
   const state = await getState();
   if (!state.lwRunning) return;
 
@@ -53,16 +60,18 @@ async function runOnListPage({ lwIndex, lwLimit }) {
 
   if (lwIndex >= editLinks.length) {
     console.log('✅ Done all products');
+
     chrome.storage.local.set(
       {
         lwRunning: false,
         lwIndex: 0,
       },
       () => {
+        // ✅ Clear flag để không auto chạy lại
+        sessionStorage.removeItem('lwManualStart');
         alert('✅ Link Whisper automation DONE');
       },
     );
-
     return;
   }
 
@@ -89,10 +98,8 @@ async function runOnEditPage({ lwIndex }) {
   window.scrollTo({ top: document.body.scrollHeight });
   await sleep(1000);
 
-  const updateExistKeyword = await waitAndClick(
-    'button.wpil-update-selected-keywords',
-    3000,
-  );
+  await waitAndClick('button.wpil-update-selected-keywords', 3000);
+
   await sleep(1000);
   window.scrollTo({ top: document.body.scrollHeight });
   await sleep(1000);
@@ -102,7 +109,7 @@ async function runOnEditPage({ lwIndex }) {
   // 2️⃣ Check All
   const hasCheckAll = await waitAndClick(
     'tr.wpil-suggestion-table-heading input#select_all',
-    3000,
+    10000,
   );
 
   if (!hasCheckAll) {
@@ -112,13 +119,11 @@ async function runOnEditPage({ lwIndex }) {
 
   console.log('[LW] ✅ Check All clicked');
 
-  await sleep(1000);
-
   // 3️⃣ Add links
   await waitAndClick('button.sync_linking_keywords_list', 5000);
   console.log('[LW] ➕ Add clicked');
 
-  await sleep(4000);
+  await sleep(5000);
 
   backToList(lwIndex);
 }
@@ -164,3 +169,9 @@ function getState() {
     chrome.storage.local.get(['lwRunning', 'lwIndex', 'lwLimit'], resolve);
   });
 }
+
+/* ✅ RẤT QUAN TRỌNG
+   - run() CẦN để resume sau reload
+   - nhưng đã bị khóa bởi sessionStorage
+*/
+run();
