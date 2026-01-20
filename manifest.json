@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Link Whisper Auto",
+  "version": "1.0",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "http://*/wp-admin/*",
+    "https://*/wp-admin/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/wp-admin/*",
+        "https://*/wp-admin/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}
