@@ -19,39 +19,43 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 /* ================= START ================= */
 
 async function startAutomation(msg) {
-  // ✅ Đánh dấu tab này đã nhấn Start
-  sessionStorage.setItem('lwManualStart', '1');
+  const tabId = msg.tabId;
+
+  // Đánh dấu tab này đã start
+  sessionStorage.setItem('lwManualStart', tabId);
 
   await chrome.storage.local.set({
-    lwRunning: true,
-    lwIndex: 0,
-    lwLimit: msg.limit || 20,
-    lwListUrl: msg.listUrl,
+    [`lwRunning_${tabId}`]: true,
+    [`lwIndex_${tabId}`]: 0,
+    [`lwLimit_${tabId}`]: msg.limit || 20,
+    [`lwListUrl_${tabId}`]: msg.listUrl,
   });
 
-  console.log('[LW] ▶️ Automation started');
-  run();
+  console.log('[LW] ▶️ Automation started on tab', tabId);
+
+  run(tabId);
 }
 
 /* ================= ENTRY ================= */
 
-async function run() {
-  // ❌ Chưa nhấn Start trong tab này → KHÔNG chạy
-  if (!sessionStorage.getItem('lwManualStart')) return;
+async function run(passedTabId) {
+  const tabId = passedTabId || sessionStorage.getItem('lwManualStart');
 
-  const state = await getState();
+  if (!tabId) return;
+
+  const state = await getState(tabId);
   if (!state.lwRunning) return;
 
   if (isProductList()) {
-    await runOnListPage(state);
+    await runOnListPage(state, tabId);
   } else if (isEditPage()) {
-    await runOnEditPage(state);
+    await runOnEditPage(state, tabId);
   }
 }
 
 /* ================= LIST PAGE ================= */
 
-async function runOnListPage({ lwIndex, lwLimit }) {
+async function runOnListPage({ lwIndex, lwLimit }, tabId) {
   console.log('[LW] 📋 On product list');
 
   const editLinks = Array.from(
@@ -63,11 +67,10 @@ async function runOnListPage({ lwIndex, lwLimit }) {
 
     chrome.storage.local.set(
       {
-        lwRunning: false,
-        lwIndex: 0,
+        [`lwRunning_${tabId}`]: false,
+        [`lwIndex_${tabId}`]: 0,
       },
       () => {
-        // ✅ Clear flag để không auto chạy lại
         sessionStorage.removeItem('lwManualStart');
         alert('✅ Link Whisper automation DONE');
       },
@@ -89,7 +92,7 @@ async function runOnListPage({ lwIndex, lwLimit }) {
 
 /* ================= EDIT PAGE ================= */
 
-async function runOnEditPage({ lwIndex }) {
+async function runOnEditPage({ lwIndex }, tabId) {
   console.log('[LW] 📝 On edit page');
 
   // 1️⃣ Scroll để Link Whisper init
@@ -114,7 +117,7 @@ async function runOnEditPage({ lwIndex }) {
 
   if (!hasCheckAll) {
     console.log('[LW] ❌ No Check All → skip');
-    return backToList(lwIndex);
+    return backToList(lwIndex, tabId);;
   }
 
   console.log('[LW] ✅ Check All clicked');
@@ -125,7 +128,7 @@ async function runOnEditPage({ lwIndex }) {
 
   await sleep(5000);
 
-  backToList(lwIndex);
+  backToList(lwIndex, tabId);;
 }
 
 /* ================= HELPERS ================= */
@@ -138,18 +141,23 @@ async function waitAndClick(selector, timeout) {
       el.click();
       return true;
     }
+
+    window.scrollTo({ top: document.body.scrollHeight }); 
     await sleep(400);
   }
   return false;
 }
 
-function backToList(index) {
+function backToList(index, tabId) {
   console.log('[LW] ↩️ Back to list');
 
-  chrome.storage.local.get(['lwListUrl'], (res) => {
-    chrome.storage.local.set({ lwIndex: index + 1 }, () => {
-      window.location.href = res.lwListUrl;
-    });
+  chrome.storage.local.get([`lwListUrl_${tabId}`], (res) => {
+    chrome.storage.local.set(
+      { [`lwIndex_${tabId}`]: index + 1 },
+      () => {
+        window.location.href = res[`lwListUrl_${tabId}`];
+      },
+    );
   });
 }
 
@@ -164,14 +172,25 @@ function isEditPage() {
   );
 }
 
-function getState() {
+function getState(tabId) {
   return new Promise((resolve) => {
-    chrome.storage.local.get(['lwRunning', 'lwIndex', 'lwLimit'], resolve);
+    chrome.storage.local.get(
+      [
+        `lwRunning_${tabId}`,
+        `lwIndex_${tabId}`,
+        `lwLimit_${tabId}`,
+        `lwListUrl_${tabId}`,
+      ],
+      (res) => {
+        resolve({
+          lwRunning: res[`lwRunning_${tabId}`],
+          lwIndex: res[`lwIndex_${tabId}`] || 0,
+          lwLimit: res[`lwLimit_${tabId}`] || 20,
+          lwListUrl: res[`lwListUrl_${tabId}`],
+        });
+      },
+    );
   });
 }
 
-/* ✅ RẤT QUAN TRỌNG
-   - run() CẦN để resume sau reload
-   - nhưng đã bị khóa bởi sessionStorage
-*/
 run();

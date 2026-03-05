@@ -12,6 +12,7 @@ document.getElementById('start').addEventListener('click', async () => {
       action: 'START_LINK_WHISPER',
       limit,
       listUrl: tab.url,
+      tabId: tab.id,
     });
   });
 });
