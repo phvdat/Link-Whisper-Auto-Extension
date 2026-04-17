@@ -1,16 +1,16 @@
-console.log('[LW] content script injected');
+console.log("[LW] content script injected");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ================= MESSAGE ================= */
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === 'PING') {
+  if (msg.action === "PING") {
     sendResponse({ ok: true });
     return;
   }
 
-  if (msg.action === 'START_LINK_WHISPER') {
+  if (msg.action === "START_LINK_WHISPER") {
     startAutomation(msg);
     sendResponse({ ok: true });
   }
@@ -22,7 +22,7 @@ async function startAutomation(msg) {
   const tabId = msg.tabId;
 
   // Đánh dấu tab này đã start
-  sessionStorage.setItem('lwManualStart', tabId);
+  sessionStorage.setItem("lwManualStart", tabId);
 
   await chrome.storage.local.set({
     [`lwRunning_${tabId}`]: true,
@@ -31,7 +31,7 @@ async function startAutomation(msg) {
     [`lwListUrl_${tabId}`]: msg.listUrl,
   });
 
-  console.log('[LW] ▶️ Automation started on tab', tabId);
+  console.log("[LW] ▶️ Automation started on tab", tabId);
 
   run(tabId);
 }
@@ -39,7 +39,7 @@ async function startAutomation(msg) {
 /* ================= ENTRY ================= */
 
 async function run(passedTabId) {
-  const tabId = passedTabId || sessionStorage.getItem('lwManualStart');
+  const tabId = passedTabId || sessionStorage.getItem("lwManualStart");
 
   if (!tabId) return;
 
@@ -56,14 +56,14 @@ async function run(passedTabId) {
 /* ================= LIST PAGE ================= */
 
 async function runOnListPage({ lwIndex, lwLimit }, tabId) {
-  console.log('[LW] 📋 On product list');
+  console.log("[LW] 📋 On product list");
 
   const editLinks = Array.from(
-    document.querySelectorAll('span.edit > a'),
+    document.querySelectorAll("span.edit > a"),
   ).slice(0, lwLimit);
 
   if (lwIndex >= editLinks.length) {
-    console.log('✅ Done all products');
+    console.log("✅ Done all products");
 
     chrome.storage.local.set(
       {
@@ -71,8 +71,8 @@ async function runOnListPage({ lwIndex, lwLimit }, tabId) {
         [`lwIndex_${tabId}`]: 0,
       },
       () => {
-        sessionStorage.removeItem('lwManualStart');
-        alert('✅ Link Whisper automation DONE');
+        sessionStorage.removeItem("lwManualStart");
+        alert("✅ Link Whisper automation DONE");
       },
     );
     return;
@@ -81,10 +81,10 @@ async function runOnListPage({ lwIndex, lwLimit }, tabId) {
   const link = editLinks[lwIndex];
   console.log(`[LW] 👉 Open product ${lwIndex + 1}/${editLinks.length}`);
 
-  link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  link.scrollIntoView({ behavior: "smooth", block: "center" });
   await sleep(300);
 
-  link.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+  link.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
   await sleep(200);
 
   link.click();
@@ -93,7 +93,7 @@ async function runOnListPage({ lwIndex, lwLimit }, tabId) {
 /* ================= EDIT PAGE ================= */
 
 async function runOnEditPage({ lwIndex }, tabId) {
-  console.log('[LW] 📝 On edit page');
+  console.log("[LW] 📝 On edit page");
 
   // 1️⃣ Scroll để Link Whisper init
   window.scrollTo({ top: document.body.scrollHeight });
@@ -101,7 +101,7 @@ async function runOnEditPage({ lwIndex }, tabId) {
   window.scrollTo({ top: document.body.scrollHeight });
   await sleep(1000);
 
-  await waitAndClick('button.wpil-update-selected-keywords', 3000);
+  await waitAndClick("button.wpil-update-selected-keywords", 3000);
 
   await sleep(1000);
   window.scrollTo({ top: document.body.scrollHeight });
@@ -110,65 +110,63 @@ async function runOnEditPage({ lwIndex }, tabId) {
   await sleep(1000);
 
   // 2️⃣ Check All
-  const hasCheckAll = await waitAndClick(
-    'tr.wpil-suggestion-table-heading input#select_all',
-    10000,
+  const result = await waitAndClick(
+    "tr.wpil-suggestion-table-heading input#select_all",
+    30000,
+    ["Post has reached the max link limit", "No suggestions found"],
   );
-
-  if (!hasCheckAll) {
-    console.log('[LW] ❌ No Check All → skip');
-    return backToList(lwIndex, tabId);;
+  if (result === "ABORT") {
+    console.log("[LW] 🚫 Skip post (no suggestions or max limit)");
+    return backToList(lwIndex, tabId);
   }
-
-  console.log('[LW] ✅ Check All clicked');
-
-  // 3️⃣ Add links
-  await waitAndClick('button.sync_linking_keywords_list', 5000);
-  console.log('[LW] ➕ Add clicked');
-
-  await sleep(5000);
-
-  backToList(lwIndex, tabId);;
+  if (result !== "OK") {
+    console.log("[LW] ❌ No Check All → skip");
+    return backToList(lwIndex, tabId);
+  }
+  console.log("[LW] ✅ Check All clicked");
 }
 
 /* ================= HELPERS ================= */
 
-async function waitAndClick(selector, timeout) {
+async function waitAndClick(selector, timeout, abortTexts = []) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
+    // ❌ Check tất cả abort text
+    for (const text of abortTexts) {
+      if (document.body.innerText.includes(text)) {
+        console.log(`[LW] ⚠️ Found abort text: ${text}`);
+        return "ABORT";
+      }
+    }
     const el = document.querySelector(selector);
     if (el) {
       el.click();
-      return true;
+      return "OK";
     }
-
-    window.scrollTo({ top: document.body.scrollHeight }); 
+    window.scrollTo({ top: document.body.scrollHeight });
     await sleep(400);
   }
-  return false;
+  return "TIMEOUT";
 }
 
 function backToList(index, tabId) {
-  console.log('[LW] ↩️ Back to list');
+  console.log("[LW] ↩️ Back to list");
 
   chrome.storage.local.get([`lwListUrl_${tabId}`], (res) => {
-    chrome.storage.local.set(
-      { [`lwIndex_${tabId}`]: index + 1 },
-      () => {
-        window.location.href = res[`lwListUrl_${tabId}`];
-      },
-    );
+    chrome.storage.local.set({ [`lwIndex_${tabId}`]: index + 1 }, () => {
+      window.location.href = res[`lwListUrl_${tabId}`];
+    });
   });
 }
 
 function isProductList() {
-  return location.href.includes('edit.php?post_type=product');
+  return location.href.includes("edit.php?post_type=product");
 }
 
 function isEditPage() {
   return (
-    location.href.includes('post.php') &&
-    location.search.includes('action=edit')
+    location.href.includes("post.php") &&
+    location.search.includes("action=edit")
   );
 }
 
