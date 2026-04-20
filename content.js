@@ -119,6 +119,15 @@ async function runOnEditPage({ lwIndex }, tabId) {
     console.log("[LW] 🚫 Skip post (no suggestions or max limit)");
     return backToList(lwIndex, tabId);
   }
+  
+  console.log('[LW] ✅ Check All clicked');
+  // 3️⃣ Add links
+  await waitAndClick('button.sync_linking_keywords_list', 5000);
+  console.log('[LW] ➕ Add clicked');
+
+  await sleep(5000);
+
+  backToList(lwIndex, tabId);
   if (result !== "OK") {
     console.log("[LW] ❌ No Check All → skip");
     return backToList(lwIndex, tabId);
